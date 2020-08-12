@@ -1,0 +1,64 @@
+#include <SoftwareSerial.h>
+#include <Keypad.h>
+
+int TX = 2;
+int RX = 3;
+
+int red_light = 4;
+int green_light = 13;
+
+const byte ROWS = 4; // 행의 갯수
+const byte COLS = 4; // 열의 갯수
+
+// 배열로 각 버튼을 숫자나 문자로 대응
+char myKeys[ROWS][COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+byte rowPins[ROWS] = {8, 7, 6, 5}; // 행(Raw)가 연결된 아두이노 핀 번호
+byte colPins[COLS] = {9, 10, 11, 12}; // 열(column)가 연결된 아두이노 핀 번호
+// keypad 객체 인스턴스화 Keypad(makeKeymap(userKeymap), row[], col[], rows, cols)
+
+Keypad customKeypad = Keypad( makeKeymap(myKeys), rowPins, colPins, ROWS, COLS);
+SoftwareSerial my_blue(TX, RX); // 아두이노 연결
+
+void setup()
+{
+  Serial.begin(9600); // slave 시리얼 
+  my_blue.begin(9600);// master 시리얼
+  pinMode(red_light, OUTPUT);
+  pinMode(green_light, OUTPUT); 
+}
+
+void loop()
+{
+  // getKey()는 키패드에서 입력된 값이 있을경우 반환합니다.
+  char customKey = customKeypad.getKey(); // 키패드에서 입력한 값 변수 저장
+
+  if (customKey)  // 입력된 값이 있으면
+  {
+    my_blue.print(customKey); // master에 출력
+  }
+
+  // 결제 가능한 카드 받아올 때
+  if (my_blue.available()) {
+    char check_card = my_blue.read(); // master에서 카드 확인 값
+    check_card_led( check_card ); // 카드 확인 값 넘겨서 라이트 
+  }
+
+}
+
+void check_card_led( char check_card ) {
+  if ( check_card == '1' ) {  // 맞는 카드 사용 시 
+    digitalWrite(green_light, HIGH);  // 초록 led on
+    delay(2000);
+    digitalWrite(green_light, LOW); 
+  } else if ( check_card == '0') {  // 틀린 카드 사용 시 
+    digitalWrite(red_light, HIGH);  // 빨간 led on
+    delay(2000);
+    digitalWrite(red_light, LOW);
+  }
+}

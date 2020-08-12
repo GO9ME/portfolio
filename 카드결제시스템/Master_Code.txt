@@ -1,0 +1,176 @@
+#include <Time.h>
+#include <TimeLib.h>
+
+#include <SoftwareSerial.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <LiquidCrystal_I2C.h>
+
+#define RST_PIN 9
+#define SS_PIN 10
+
+MFRC522 mfrc(SS_PIN, RST_PIN);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+int TX = 4;
+int RX = 5;
+
+char mode = 'C';
+
+SoftwareSerial my_blue (TX, RX);
+
+volatile byte state = HIGH;
+
+char flag = '1';
+
+char price[1][7] = {{'\0'}};  // 가격 담을 배열
+
+int row = 0;
+int num = 0;
+
+int duration = 500;
+unsigned long pre_time = 0;
+unsigned long cur_time = 0;
+
+
+void lcd_reset() {
+  cur_time = millis();
+  if ( cur_time - pre_time >= duration)
+  {
+    pre_time = cur_time;
+    state = !state;
+  }
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  my_blue.begin(9600);
+
+  setTime(19, 5, 0, 28, 4, 20);
+
+  SPI.begin();
+  mfrc.PCD_Init();
+  lcd.init();
+  lcd.backlight();
+  lcd.print("PRICE ENTER");
+
+  attachInterrupt(0, lcd_reset, FALLING);
+}
+
+
+void loop() {
+  if ( state ) {
+    if (my_blue.available()) {
+
+      char input = my_blue.read(); //키패드 입력값
+      Serial.println(input);
+
+      lcd.setCursor(0, 1);
+      price_input(input);
+    }
+  } else { //인터럽트 시 lcd 초기화
+    price_reset();
+  }
+  
+  if ( mode == 'C') { // 시계모드 1초 카운팅
+    digitalClockDisplay();
+    delay(1000);
+  }
+  
+  /*
+  if (Serial.available()) {
+    my_blue.write(Serial.read());
+  }
+  */
+
+}
+
+void price_input(char input) {
+  //if ( input ) {
+  lcd.setCursor(0, 1);
+  if ( num < 7 ) {
+    if ( input == '#'|| input =='*') {        //결제처리
+      price_pay();
+    } else if ( input == 'A') { //가격 초기화
+      price_reset();
+    } else if ( input == 'B') { //가격 입력 모드
+      price_reset();
+    } else if ( input == 'C') { //시계 모드
+      mode = 'C';
+    } else if ( input == 'D') {
+      price_reset();
+    } else {
+      if ( mode == 'C') {
+        price_reset();
+      }
+      price[row][num] = input;
+      lcd.setCursor(num, 1);
+      lcd.print(input);
+      num++;
+    }
+  } else {
+    price_reset();
+    
+  }
+}
+
+void price_reset() {
+  mode = 'P';
+  for ( int i = 0 ; i < 7; i++) {
+    price[0][i] = 0; // 값 초기화
+  }
+  num = 0;
+  lcd.clear();
+  lcd.print("PRICE ENTER");
+}
+
+void price_pay() {
+
+  if (!mfrc.PICC_IsNewCardPresent())
+    return ;
+  if (!mfrc.PICC_ReadCardSerial())
+    return ;
+
+  lcd.clear();
+  lcd.print("Payment state");
+  lcd.setCursor(0, 1);
+
+  if (mfrc.uid.uidByte[0] == 35 &&
+      mfrc.uid.uidByte[1] == 100 &&
+      mfrc.uid.uidByte[2] == 185 &&
+      mfrc.uid.uidByte[3] == 2)
+  {
+    flag = '1';
+    lcd.print("Success");
+    delay(50);
+    my_blue.write(flag); // 성공시 flag 값 1 전달 초록 불 on
+  }
+  else {
+    flag = '0';
+    lcd.print("Failed");
+    delay(50);
+    my_blue.write(flag); // 실패시 flag 값 0 전달 레드 불 on
+  }
+
+  delay(3000);    // 결제 상태 표시 3초
+  price_reset();  // 결제 후 초기화
+
+}
+void digitalClockDisplay() {
+  // digital clock display of the time
+  lcd.clear();
+  lcd.print("Clock Mode");
+  lcd.setCursor(0, 1);
+  //lcd.print(year());
+  //lcd.print(".");
+  lcd.print(month());
+  lcd.print(".");
+  lcd.print(day());
+  lcd.print(" ");
+  lcd.print(hour());
+  lcd.print(":");
+  lcd.print(minute());
+  lcd.print(":");
+  lcd.print(second());
+}
